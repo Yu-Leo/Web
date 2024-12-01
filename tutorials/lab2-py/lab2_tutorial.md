@@ -1,49 +1,22 @@
-# Методические указания по выполнению лабораторной работы №2  
+# Методические указания по выполнению лабораторной работы №2
 
 ## Работа с PostgreSQL
 
-На вирутальной машине уже установлен PostgreSQL, чтобы начать с ним взаимодействовать непосредственно на ВМ необходимо активировать терминальный клиент **psql** одноименной кома ндой
+Процесс запуска и настройки PostgreSQL в Docker-контейнере при помощи docker-compose подробно описан в [соответствующих методических указаниях](../lab2-db/README.md).
 
-**ВНИМАНИЕ!** Если вы не пользуетесь кафедральной виртуальной машиной, а используете БД локально или как-то по-другому, то для активации терминального клиента в Linux надо использовать команду - **sudo -i -u postgres psql**.
+При объяснении интеграции Python и Django с PostgreSQL я буду исходить из того, что сам PostgreSQL у вас уже поднят и доступен для подключения.
 
-![Активация терминального клиента](assets/8.PNG)
+## Работа с PostgreSQL из Python
 
-Если вы устанавливаете PostgreSQL на свою машину самостоятельно, вам в помощь хорошая статья - [How To Install PostgreSQL on Ubuntu 20.04](https://www.digitalocean.com/community/tutorials/how-to-install-postgresql-on-ubuntu-20-04-quickstart)
+Для начала разберём пример работы с PostgreSQL из Python **без Django ORM**.
 
+Установим при помощи пакетного менеджера `pip` пакет `psycopg2-binary`, который содержит классы и функции для взаимодействия с PostgreSQL:
 
-Некоторые стандартные команды терминального клиента:
-- **\l** - показать доступные базы данных
-- **\с <имя базы>** - выбрать базу данных
-- **\dt** - показать таблицы в выбранной базе данных
-- **\d+ <имя таблицы>** - вывести схему таблицы
-
-Для начала необходимо создать пользователя базы данных. На вирутальной машине он уже создан, его имя также - student
-
-```sql
-create user user_name with password 'mypassword';
+```shell
+pip install psycopg2-binary
 ```
 
-После этого нужно создать базу данных. Этот шаг можно также сделать в дайльнейшем через IDE. Дефолтная база данных называется postgres.
-
-
-```sql
-createdb `student`;
-```
-
-И выдать права новому пользователю на эту базу данных.
-
-```sql
-grant all privileges on database student to user_name;;
-```
-
-Теперь можно создавать таблицу в этой базе данных, но сначала нужно в
-нее перейти:
-
-![Создание проекта](assets/3.png)
-
-Чтобы создать таблицу нужно использовать команду create table.
-Рассмотрим простой пример с созданием таблицы “книга”, в которой будет
-название книги и ее описание:
+Создадим в нашей БД таблицу `books`:
 
 ```sql
 CREATE TABLE books (
@@ -53,282 +26,470 @@ CREATE TABLE books (
 );
 ```
 
-Для добавления/чтения/обновления/удаления (CRUD) записей служат
-команды INSERT, DELETE, UPDATE, SELECT. Подробно эти команды
-рассмотрены в курсе баз данных.
-
-```sql
-INSERT INTO books (id, name, description) VALUES(1, 'Мастер и Маргарита', 'Крутая книга');
-
-SELECT * FROM books;
-```
-
-## Подключение к БД через IDE
-В данном случае пример показан на DBeaver, но вы можете использовать то IDE, которое для вас удобнее, например PG Admin или же DtaGrip
-
-Открываем окно для создания соединения и выбираем PostgreSQL
-
-![Соединение для postgresql](assets/9.png)
-
-Далее открывается окно, где необходимо прописать креды
-Хост: vm_ip (в данном случае 192.168.0.189)
-База данных: по умолчанию postgresql, но можно выбрать и свою: если вы создали его через psql
-Пользователь: student
-Пароль: root
-
-![Креды](assets/10.png)
-
-После этого у вас должно установиться соединение с БД
-
-![Успешное подключени](assets/11.png)
-
-
-## Обращение к БД из Python
-
-В этой части лабораторной работы необходимо создать подключение из
-Python к PostgreSQL, занести и выбрать несколько записей с помощью кода.
-
-Для начала требуется установить пакет psycopg2-binary из pip. Это необходимый
-набор классов и функций для работы с postgresql из вашего кода.
-
-Команда для установки: `pip install psycopg2-binary`
-
-В этой части вашей задачей является написание простого скрипта, который
-подключается к базе данных, добавляет одну запись, затем получает и выводит
-на экран все записи таблицы books, а затем удаляет все записи.
-
-`Пример`
+Напишем небольшой скрипт, который:
+1. Подключается к БД
+2. Добавляет новую запись в таблицу в таблицу `books`
 
 ```python
 import psycopg2
 
-conn = psycopg2.connect(dbname="postgres", host="192.168.0.189", user="student", password="root", port="5432")
+
+conn = psycopg2.connect(
+            host="localhost",
+            port="5432",
+            user="postgres",
+            password="postgres",
+            dbname="postgres")
 
 cursor = conn.cursor()
- 
-cursor.execute("INSERT INTO public.books (id, name, description) VALUES(1, 'Мастер и Маргарита', 'Крутая книга')")
- 
-conn.commit()   # реальное выполнение команд sql1
- 
+
+query = "INSERT INTO books (id, name, description) VALUES(1, 'Мастер и Маргарита', 'Крутая книга')"
+
+cursor.execute(query)
+
+conn.commit()
+
 cursor.close()
 conn.close()
 ```
 
-`Итог`
+## Работа с Django ORM
 
-![Создание проекта](assets/12.png)
+Django ORM позволяет работать с БД как с Python-объектами, что облегчает и ускоряет разработку. Однако стоит помнить, что в некоторых случаях сложные SQL-запросы, составленные при помощи ORM, могут быть менее оптимальны, чем составленные разработчиком вручную.
 
-## Django ORM
+С полными возможностями Django ORM можно ознакомиться в [официальной документации](https://docs.djangoproject.com/en/5.1/topics/db/).
 
-Django предоставляет удобные возможности для представления базы
-данных в виде python-объектов. Django ORM
-облегчает и ускоряет разработку. Однако необходимо помнить, что в случае
-реализации сложных SQL-запросов бывает быстрее и выгоднее использовать
-чистые запросы без ORM.
+Перейдем к рассмотрению возможностей Django ORM для решения задач лабораторной работы. Возьмём за основу проект, созданный в рамках [предыдущей лабораторной работы](../lab1-py/lab1_tutorial.md) и добавим в него интеграцию с PostgreSQL.
 
-Для использования ORM требуется описать свои модели предметной
-области в виде классов, наследованных от django.db.models.Model.
+Разобьём всю работу на 5 этапов:
 
-Примеры работы с ORM:
-https://django.fun/docs/django/ru/3.2/topics/db/models/
+1. Реализация без Django ORM
+2. Настройка подключения к БД и создание модели услуг
+3. Создание моделей заявок и модели для связи many-to-many (услуги в заявке)
+4. Получение данных об услуге при помощи курсора
+5. Удаление и фильтрация услуг
 
-Чтобы методы модели работали, необходимо указать настройки
-подключения БД в `settings.py`
+Для простоты объяснения выберем предметную область "Интернет-магазин". Услуги - товары, заявки - заказы, который собирает и оформляет покупатель.
 
-`settings.py`
+### Реализация без Django ORM
+
+#### База
+
+**Структура проекта**
+
+```
+.
+├── bmstu
+│   ├── asgi.py
+│   ├── __init__.py
+│   ├── settings.py
+│   ├── urls.py
+│   └── wsgi.py
+├── bmstu_lab
+│   ├── admin.py
+│   ├── apps.py
+│   ├── __init__.py
+│   ├── migrations
+│   │   ├── __init__.py
+│   ├── models.py
+│   ├── templates
+│   │   ├── base.html
+│   │   ├── product.html
+│   │   └── products_list.html
+│   ├── tests.py
+│   └── views.py
+├── db.sqlite3
+└── manage.py
+```
+
+**urls.py**
+
+```python
+from django.contrib import admin
+from django.urls import path
+
+from bmstu_lab import views
+
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('products/', views.get_products_list_page, name='products_list'),
+    path('products/<int:id>/', views.get_product_page, name='product'),
+]
+```
+
+**base.html**
+```html
+<!doctype html>
+<html lang="en" class="h-100">
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}{% endblock %}</title>
+</head>
+<body>
+<div class="container">
+    {% block content %}{% endblock %}
+</div>
+</body>
+</html>
+```
+
+**views.py**
+
+```python
+PRODUCTS_LIST = [
+    {
+        "id": 1,
+        "title": "Хлеб",
+        "price": 35,
+    },
+    {
+        "id": 2,
+        "title": "Молоко",
+        "price": 80,
+    },
+    {
+        "id": 3,
+        "title": "Сыр",
+        "price": 300,
+    },
+    {
+        "id": 4,
+        "title": "Колбаса",
+        "price": 500,
+    }
+]
+
+ITEMS_IN_CART = 2
+```
+
+#### Список услуг
+
+**views.py**
+```python
+def get_products_list_page(request):
+    """
+    Получение страницы списка товаров
+    """
+
+    return render(request,
+                  'products_list.html',
+                  {
+                      "data": {
+                          "products": PRODUCTS_LIST,
+                          "items_in_cart": ITEMS_IN_CART,
+                      }
+                  })
+```
+
+**products_list.html**
+```html
+{% extends 'base.html' %}
+
+{% block title %}Товары{% endblock %}
+
+{% block content %}
+    Корзина [{{ data.items_in_cart }}]
+    <h1>Список товаров</h1>
+    <ul>
+    {% for product in data.products %}
+            <li><a href="{% url 'product' product.id %}">{{ product.title }}</a> - {{ product.price }} руб.</li>
+        {% empty %}
+            Товаров нет
+        {% endfor %}
+    </ul>
+{% endblock %}
+```
+#### Страница услуги
+
+**views.py**
+```python
+def get_product_page(request, id):
+    """
+    Получение страницы товара
+    """
+
+    for product in PRODUCTS_LIST:
+        if product["id"] == id:
+            return render(request,
+                          "product.html",
+                          {
+                              "data": product
+                          })
+    return render(request, "product.html")
+```
+
+**product.html**
+```html
+{% extends 'base.html' %}
+
+{% block title %}Товар{% endblock %}
+
+{% block content %}
+    <h1>Информация о товаре "{{ data.title }}"</h1>
+    <li>Название: <strong>{{ data.title }}</strong></li>
+    <li>Цена: <strong>{{ data.price }} руб.</strong></li>
+{% endblock %}
+```
+
+
+### Настройка подключения к БД и создание модели услуг
+
+Добавим подключение к PostgreSQL.
+
+Для этого в **settings.py** необходимо указать:
+
 ```python
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'first_db', # Имя вашей БД. Если вы создали черезе psql или IDE свою базу и хотите использовать его - пропишите его имя здесь
-        'USER': 'dbuser',
-        'PASSWORD': '123',
+        'NAME': 'postgres',
+        'USER': 'postgres',
+        'PASSWORD': 'postgres',
         'HOST': 'localhost',
-        'PORT': 5432, # Стандартный порт PostgreSQL
+        'PORT': 5432,
     }
 }
 ```
 
-**ВНИМАНИЕ!** Если у вас сломались миграции и вылезают ошибки, их можно восстановить следующим образом:
-1. Удалить все папки pycache
-2. Удалить все файлы миграции (в папке migrations должен оставаться только файл __init__.py)
-3. Удалить все таблицы из базы, она должна быть полностью пустой
-4. python manage.py migrate --run-syncdb (синхронизирует приложение с бд, создает служебные таблицы)
-5. python manage.py makemigrations <название вашего приложения>
-6. python manage.py migrate <название вашего приложения>
+После чего применим автоматически созданные миграции Django:
 
-**ВНИМАНИЕ!** Если у вас проект находится локально, а БД - на виртуальной машине, то в *HOST* прописываете IP виртуальной машины. Если же у вас и проект и БД на виртуальной машине или они оба на локальной машине, в *HOST* - пишете **127.0.0.1** или **localhost**.
-
-В этой части лабораторной работы требуется самостоятельно создать
-модели по предметной области из предыдущей лабораторной работы.
-
-Вы можете создать классы моделей всех таблиц в вашей БД с помощью
-
-```
-python manage.py inspectdb
+```shell
+python3 manage.py migrate
 ```
 
-Все запросы к БД представляются в Django ORM в виде объектов QuerySet.
-Это своеобразный “конструктор” запросов, который позволяет с помощью кода
-“собрать” SQL-запрос. Примеры работы с queryset и моделями можно найти
-здесь: https://django.fun/docs/django/ru/3.2/topics/db/queries/
+Добавим модель товара (услуги) в **models.py**:
 
-Кроме возможности создать модели и управлять ими из кода, Django ORM
-также позволяет создавать БД по описанию моделей, а также изменять
-структуру БД при изменении моделей.
-
-Для этих действий используются так называемые миграции. Это скрипты,
-которыу выполняют преобразование схемы базы данных с помощью ALTER
-TABLE.
-
-Миграции в Django создаются с помощью команды `manage.py
-makemigrations <название приложения>`. После того, как миграция создана
-(скрипт миграции создался и добавился в папку migrations), ее нужно применить
-с помощью команды `manage.py migrate <название приложения>`.
-
-Все изменения моделей (или их создание) будут фиксироваться в
-миграции. Если модели до миграции не было, значит после применения
-миграции будет создана соответствующая таблица. Если модель изменена
-(например, добавлено поле), после применения миграции это поле будет
-добавлено в соответствующую таблицу.
-
-`Пример`
-
-`models.py`
 ```python
 from django.db import models
 
-# Create your models here.
-class Book(models.Model):
-    name = models.CharField(max_length=30)
-    description = models.CharField(max_length=255)
+class Product(models.Model):
+    title = models.CharField(max_length=255)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.title
+```
+
+Создадим миграцию:
+
+```shell
+python3 manage.py makemigrations
+```
+
+И применим её:
+
+```shell
+python3 manage.py migrate
+```
+
+Добавим товары в таблицу SQL-запросом:
+
+```sql
+INSERT INTO public.bmstu_lab_product (id, title, price, is_active) VALUES
+(1, 'Хлеб', 35, True),
+(2, 'Молоко', 80, True),
+(3, 'Сыр', 300, True),
+(4, 'Колбаса', 500, True);
+```
+
+И перепишем метод получения страницы списка товаров при помощи Django ORM в **views.py**:
+
+```python
+def get_products_list_page(request):
+    """
+    Получение страницы списка товаров
+    """
+
+    return render(request,
+                  'products_list.html',
+                  {
+                      "data": {
+                          "products": Product.objects.all(),
+                          "items_in_cart": ITEMS_IN_CART,
+                      }
+                  })
+```
+
+### Создание моделей заявок и связи связи услуги-заявки
+
+Добавим 2 оставшиеся модели (заявок и связи услуги-заявки) в файл **models.py**
+
+```python
+from django.contrib.auth.models import User
+
+# ...
+
+class Order(models.Model):
+    class RequestStatus(models.TextChoices):
+        DRAFT = "DRAFT"
+        DELETED = "DELETED"
+        FORMED = "FORMED"
+        COMPLETED = "COMPLETED"
+        REJECTED = "REJECTED"
+
+    status = models.CharField(
+        max_length=10,
+        choices=RequestStatus.choices,
+        default=RequestStatus.DRAFT,
+    )
+
+    creation_datetime = models.DateTimeField(auto_now_add=True)
+    formation_datetime = models.DateTimeField(blank=True, null=True)
+    completion_datetime = models.DateTimeField(blank=True, null=True)
+    client = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_requests')
+    manager = models.ForeignKey(User, on_delete=models.CASCADE, related_name='managed_requests', blank=True, null=True)
+
+    def __str__(self):
+        return str(self.id)
+
+
+class ProductInOrder(models.Model):
+    order = models.ForeignKey(Order)
+    product = models.ForeignKey(Product)
+    quantity = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"{self.request_id}-{self.software_id}"
 
     class Meta:
-        managed = False
-        db_table = 'books'
+        unique_together = ('order', 'product'),
 ```
 
-`urls.py`
-```python
-    path('', views.bookList),
-    path('book/<int:id>/', views.GetBook, name='book_url')
-```
+Не забываем создать и применить миграции!
 
-`views.py`
-```python
-from bmstu_lab.models import Book
-
-def bookList(request):
-    return render(request, 'books.html', {'data' : {
-        'current_date': date.today(),
-        'books': Book.objects.all()
-    }})
-
-def GetBook(request, id):
-    return render(request, 'book.html', {'data' : {
-        'current_date': date.today(),
-        'book': Book.objects.filter(id=id)[0]
-    }})
-
-```
-
-`books.html`
-```html
-{% extends 'base.html' %}
-{% load static %}
-
-{% block title %}Список книг{% endblock %}
-
-{% block content %}
-<ul>
-    {% for book in data.books %}
-       {% include 'qw.html' with elem=book %}
-    {% empty %}
-        <li>Список пуст</li>
-    {% endfor %}
-</ul>
-{% endblock %}
-```
-
-Содержимое `qw.html` здесь не описано. Его необходимо добавить самостоятельно на основе Лабораторной работы 1.
-
-`book.html`
-```html
-{% extends 'base.html' %}
-
-{% block title %}Книга №{{ data.book.id }}{% endblock %}
-
-{% block content %}
-    <div>Название: {{ data.book.name }}</div>
-        <div>Описание: {{ data.book.description }}</div>
-{% endblock %}
-```
-
-`Итог`
-
-![Создание проекта](assets/6.png)
-
-![Создание проекта](assets/7.png)
-
-## Добавление фильтрации
-Методы нашего сервиса на бэкенде должны предусматривать получение значений всех фильтров в качестве входных параметров
-
-#### filter()
-
-`filter(*args, **kwargs)`
-
-Возвращает новый `QuerySet`, содержащий объекты, которые соответствуют заданным параметрам поиска.
-
-Параметры поиска (`**kwargs`) должны быть в формате, описанном в Полевые поиски ниже. Несколько параметров объединяются через "И" в базовом операторе `SQL`.
-
-Если вам необходимо выполнить более сложные запросы (например, запросы с операторами OR), вы можете использовать `Q objects (*args)`.
-
-#### order_by()
-
-`order_by(*fields)`
-
-По умолчанию результаты, возвращаемые QuerySet, упорядочиваются с помощью кортежа, заданного параметром ordering в классе Meta модели. Вы можете переопределить это для каждого QuerySet, используя метод order_by.
-
-Пример:
+Поскольку в одной заявке не может быть 2 одинаковых услуги, зададим это ограничение:
 
 ```python
-Entry.objects.filter(pub_date__year=2005).order_by('-pub_date', 'headline')
-```
-
-Приведенный выше результат будет упорядочен по убыванию `pub_date`, затем по возрастанию `headline`.
-
-## Панель администратора Django
-
-Доступ к панели администратора доступен по ссылке [http://127.0.0.1:8000/admin]()
-
-Для администратора требуется установить пароль в командной строке:
-1. python manage.py createsuperuser
-2. Указать логин, почту и пароль
-
-![Панель администратора](assets/django_admin.png)
-
-Для добавления доступа к редактированию ваших таблиц в интерфейсе администратора, требуется добавить классы вашей модели в `admin.py`
-
-```python
-from .models import Book
-
-admin.site.register(Book)
-```
-
-## Составной уникальный ключ
-
-Добавим ограничение в виде составного уникального ключа, чтобы поля `name` и `description` в базе данных не имели одинаковых пар значений. Такое ограничение можно использовать для таблицы `м-м`
-
-`models.py`
-```python
-class Book(models.Model):
-    name = models.CharField(max_length=30)
-    description = models.CharField(max_length=255)
-
     class Meta:
-        managed = False
-        db_table = 'books'
-        constraints = [
-            models.UniqueConstraint(fields=['name', 'description'], name='name of constraint')
-        ]
+        unique_together = ('order', 'product'),
+```
+
+Перепишем метод получения страницы товаров:
+
+```python
+def get_products_list_page(request):
+    """
+    Получение страницы списка товаро
+    """
+
+    USER_ID = 1
+    draft_order = Order.objects.filter(client_id=USER_ID,
+                                   status=Order.RequestStatus.DRAFT).first()
+    return render(request,
+                  'products_list.html',
+                  {
+                      "data": {
+                          "products": Product.objects.all(),
+                          "items_in_cart": (get_items_in_request(draft_order.id) if draft_order is not None else 0),
+                      }
+                  })
+```
+
+Создадим супер-пользователя командой:
+
+```shell
+python3 manage.py createsuperuser
+```
+
+При помощи SQL-запросов можно создать черновик заявки для этого пользователя и добавить в него товара.
+
+### Получение данных при помощи курсора
+
+Перепишем метод получения страницы товара в **views.py**. Будем получать данные о товаре при помощи raw SQL запроса
+
+```python
+def get_product_page(request, id):
+    """
+    Получение страницы товара"""
+
+    query = "SELECT title, price FROM bmstu_lab_product WHERE id = %s"
+
+    with connection.cursor() as cursor:
+        cursor.execute(query, [id])
+        row = cursor.fetchone()
+
+    if not row:
+        return render(request, 'product.html')
+
+    return render(request,
+                  "product.html",
+                  {
+                      "data": {
+                          "title": row[0],
+                          "price": row[1],
+                      },
+                  })
+```
+
+### Удаление и фильтрация услуг
+
+Добавим возможность удалять услуги. Для этого добавим хэндлер в **views.py**
+
+```python
+def remove_product(request, id):
+    if request.method != "POST":
+        return redirect('products_list')
+    try:
+        product = Product.objects.get(id=id)
+        product.is_active = False
+        product.save()
+        return redirect('products_list')
+    except Product.DoesNotExist:
+        return redirect('products_list')
+```
+
+и строчку в **urls.py**:
+
+```python
+urlpatterns = [
+    # ...
+    path('remove_product/<int:id>/', views.remove_product, name='remove_product'),
+]
+```
+
+Поскольку теперь часть товаров может быть помечена как удалённые, нам не нужно выводить их в списке товаров, а так же отображать информацию по ним. Отредактируем соответствующие обработчики:
+
+```python
+
+def get_products_list_page(request):
+    """
+    Получение страницы списка товаров"""
+
+    USER_ID = 1
+    draft_order = Order.objects.filter(client_id=USER_ID,
+                                       status=Order.RequestStatus.DRAFT).first()
+    return render(request,
+                  'products_list.html',
+                  {
+                      "data": {
+                          "products": Product.objects.filter(is_active=True),
+                          "items_in_cart": (get_items_in_request(draft_order.id) if draft_order is not None else 0),
+                      }
+                  })
+
+def get_product_page(request, id):
+    """
+    Получение страницы товарa
+    """
+
+    query = "SELECT title, price FROM bmstu_lab_product WHERE id = %s AND is_active = True"
+
+    with connection.cursor() as cursor:
+        cursor.execute(query, [id])
+        row = cursor.fetchone()
+
+    if not row:
+        return render(request, 'product.html')
+
+    return render(request,
+                  "product.html",
+                  {
+                      "data": {
+                          "title": row[0],
+                          "price": row[1],
+                      },
+                  })
+
 ```
